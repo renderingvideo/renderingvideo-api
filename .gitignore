@@ -1,0 +1,4 @@
+# Local API request payloads
+*.local.json
+*.tmp.json
+
