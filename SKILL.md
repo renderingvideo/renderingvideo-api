@@ -1,6 +1,6 @@
 ---
 name: renderingvideo-api
-description: Authenticated RenderingVideo REST API assistant that uses Authorization: Bearer sk-... with the /api/v1/* endpoints. Use this when Codex needs to work with a RenderingVideo API key to create preview links, create or render permanent video tasks, inspect credits, convert previews, or manage uploaded files.
+description: "Authenticated RenderingVideo REST API assistant that uses Authorization: Bearer sk-... with the /api/v1/* endpoints. Use this when Codex needs to work with a RenderingVideo API key to create preview links, create or render permanent video tasks, inspect credits, convert previews, or manage uploaded files."
 ---
 
 # RenderingVideo Authenticated API Assistant
