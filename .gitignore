@@ -2,3 +2,22 @@
 *.local.json
 *.tmp.json
 
+
+# Local credentials and persistent device identity
+.env*
+!.env.example
+!.env.template
+device.json
+*.local.json
+*.pem
+*.key
+*.p12
+*.pfx
+.DS_Store
+
+# Local test dependencies, logs and data
+node_modules/
+*.log
+*.db
+*.sqlite
+*.sqlite3

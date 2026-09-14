@@ -1,0 +1,98 @@
+{
+  "meta": {
+    "version": "2.0.0",
+    "title": "Enhanced SDK preview",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "background": {
+      "type": "linear",
+      "angle": 45,
+      "stops": [
+        {
+          "offset": 0,
+          "color": "#071b34"
+        },
+        {
+          "offset": 1,
+          "color": "#17475e"
+        }
+      ]
+    }
+  },
+  "tracks": [
+    {
+      "clips": [
+        {
+          "type": "svg",
+          "svg": {
+            "$ref": "brand-mark"
+          },
+          "start": 0,
+          "duration": 5,
+          "transform": {
+            "x": "50%",
+            "y": "35%",
+            "width": 150,
+            "height": 150
+          },
+          "animations": [
+            {
+              "type": "zoomIn",
+              "duration": 0.7,
+              "easing": "easeOutCubic"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "start": 0,
+          "duration": 5,
+          "text": "Create. Preview. Render.",
+          "transform": {
+            "x": "50%",
+            "y": "62%"
+          },
+          "style": {
+            "fontFamily": "Arial",
+            "fontSize": 48,
+            "fontWeight": 700,
+            "fill": "#ffffff",
+            "textAlign": "center"
+          },
+          "animations": [
+            {
+              "type": "fadeIn",
+              "duration": 0.8,
+              "delay": 0.3
+            }
+          ],
+          "keyframes": [
+            {
+              "property": "opacity",
+              "frames": [
+                {
+                  "time": 4,
+                  "value": 1
+                },
+                {
+                  "time": 5,
+                  "value": 0,
+                  "easing": "easeInQuad"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "svgs": [
+      {
+        "id": "brand-mark",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><circle cx=\"50\" cy=\"50\" r=\"42\" fill=\"#7ee4c6\"/><path d=\"M42 30 L72 50 L42 70Z\" fill=\"#071b34\"/></svg>"
+      }
+    ]
+  }
+}

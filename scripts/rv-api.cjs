@@ -2,9 +2,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { AgentAuth } = require('./agent-auth.cjs');
 
-const API_ORIGIN = process.env.RENDERINGVIDEO_API_ORIGIN || 'https://renderingvideo.com';
+const API_ORIGIN = process.env.RENDERINGVIDEO_API_ORIGIN || process.env.RENDERINGVIDEO_API_BASE_URL || 'https://renderingvideo.com';
 const VIDEO_ORIGIN = process.env.RENDERINGVIDEO_VIDEO_ORIGIN || 'https://video.renderingvideo.com';
+const JSON_OUTPUT = process.argv.includes('--json');
+const AGENT_KEY = process.env.RENDERINGVIDEO_AGENT_KEY || '';
+const TIMEOUT = Number(process.env.RENDERINGVIDEO_TIMEOUT_MS || 90000);
+let agentAuth;
+
 const API_KEY = process.env.RENDERINGVIDEO_API_KEY || process.env.RV_API_KEY || '';
 
 function printUsage() {
@@ -12,6 +19,11 @@ function printUsage() {
 RenderingVideo Authenticated API Helper
 
 Usage:
+  node ./scripts/rv-api.cjs capabilities
+  node ./scripts/rv-api.cjs context
+  node ./scripts/rv-api.cjs audit [querystring]
+  node ./scripts/rv-api.cjs get-preview <tempId>
+  node ./scripts/rv-api.cjs delete-task <taskId>
   node ./scripts/rv-api.cjs preview <schema.json>
   node ./scripts/rv-api.cjs create <schema.json> [create-options.json]
   node ./scripts/rv-api.cjs render <taskId> [render-options.json]
@@ -27,17 +39,44 @@ Usage:
   node ./scripts/rv-api.cjs render-preview <tempId> [options.json]
 
 Environment:
-  RENDERINGVIDEO_API_KEY   Required. Your API key.
+  RENDERINGVIDEO_API_KEY   API key (sk-), or use the agent key below.
+  RENDERINGVIDEO_AGENT_KEY Agent key (ak_); exchanges and signs device requests.
+  RENDERINGVIDEO_AGENT_STATE_DIR Optional absolute directory for device identity.
+  RENDERINGVIDEO_TIMEOUT_MS Optional positive request timeout (default: 90000).
+  Append --json for machine-readable output.
   RENDERINGVIDEO_API_ORIGIN  Optional. Default: https://renderingvideo.com
   RENDERINGVIDEO_VIDEO_ORIGIN Optional. Default: https://video.renderingvideo.com
 `);
 }
 
 function requireApiKey() {
-  if (!API_KEY) {
-    console.error('Error: Missing API key. Set RENDERINGVIDEO_API_KEY first.');
-    process.exit(1);
+  if (API_KEY && AGENT_KEY) throw new Error('Set RENDERINGVIDEO_API_KEY or RENDERINGVIDEO_AGENT_KEY, not both.');
+  if (!API_KEY && !AGENT_KEY) throw new Error('Set RENDERINGVIDEO_API_KEY (sk-) or RENDERINGVIDEO_AGENT_KEY (ak_).');
+  if (API_KEY && !API_KEY.startsWith('sk-')) throw new Error('API key must start with sk-.');
+  if (!Number.isFinite(TIMEOUT) || TIMEOUT <= 0) throw new Error('RENDERINGVIDEO_TIMEOUT_MS must be positive.');
+}
+
+function getAgentAuth() {
+  if (agentAuth) return agentAuth;
+  const directory = process.env.RENDERINGVIDEO_AGENT_STATE_DIR || path.join(os.homedir(), '.config', 'renderingvideo-agent');
+  if (!path.isAbsolute(directory)) throw new Error('Agent state directory must be an absolute path.');
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  if (!fs.lstatSync(directory).isDirectory()) throw new Error('Agent state directory must not be a symlink.');
+  const filename = path.join(directory, 'device.json');
+  if (!fs.existsSync(filename)) {
+    try { fs.writeFileSync(filename, JSON.stringify(AgentAuth.generateDevice()), { flag: 'wx', mode: 0o600 }); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
   }
+  const fd = fs.openSync(filename, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  try {
+    const info = fs.fstatSync(fd);
+    if (!info.isFile() || (process.platform !== 'win32' && (info.mode & 0o077) !== 0)) {
+      throw new Error('Device key file must be a regular file readable only by its owner.');
+    }
+    const device = JSON.parse(fs.readFileSync(fd, 'utf8'));
+    agentAuth = new AgentAuth({ agentKey: AGENT_KEY, device, baseUrl: API_ORIGIN, timeout: TIMEOUT });
+  } finally { fs.closeSync(fd); }
+  return agentAuth;
 }
 
 function resolveFile(filePath) {
@@ -84,11 +123,11 @@ async function apiRequest(method, pathname, options = {}) {
 
   const url = buildUrl(pathname, options.querystring);
   const headers = {
-    Authorization: `Bearer ${API_KEY}`,
+    ...(AGENT_KEY ? await getAgentAuth().headers(method, url) : { Authorization: `Bearer ${API_KEY}` }),
     ...options.headers,
   };
 
-  const init = { method, headers };
+  const init = { method, headers, redirect: 'error', signal: AbortSignal.timeout(TIMEOUT) };
 
   if (options.json !== undefined) {
     init.body = JSON.stringify(options.json);
@@ -102,16 +141,18 @@ async function apiRequest(method, pathname, options = {}) {
   const response = await fetch(url, init);
   const body = await parseResponse(response);
 
-  if (!response.ok) {
+  if (!response.ok || body?.success === false) {
     const detail =
       typeof body === 'string' ? body : JSON.stringify(body, null, 2);
     throw new Error(`HTTP ${response.status} ${response.statusText}\n${detail}`);
   }
 
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('API returned an invalid JSON object.');
   return body;
 }
 
 function printJson(title, data) {
+  if (JSON_OUTPUT) { console.log(JSON.stringify(data)); return; }
   console.log(`\n${title}`);
   console.log('-----------------------------------');
   console.log(JSON.stringify(data, null, 2));
@@ -119,6 +160,7 @@ function printJson(title, data) {
 }
 
 function printPreviewSummary(response) {
+  if (JSON_OUTPUT) return;
   const previewUrl = toAbsoluteUrl(response.previewUrl || response.url);
   const viewerUrl = toAbsoluteUrl(response.viewerUrl || response.url);
 
@@ -132,6 +174,7 @@ function printPreviewSummary(response) {
 }
 
 function printTaskSummary(response) {
+  if (JSON_OUTPUT) return;
   console.log('\nVideo task response');
   console.log('-----------------------------------');
   if (response.taskId) console.log(`Task ID: ${response.taskId}`);
@@ -187,7 +230,7 @@ async function uploadFiles(filePaths) {
 }
 
 async function main() {
-  const [command, ...args] = process.argv.slice(2);
+  const [command, ...args] = process.argv.slice(2).filter((arg) => arg !== '--json');
 
   if (!command || command === 'help' || command === '--help' || command === '-h') {
     printUsage();
@@ -196,6 +239,22 @@ async function main() {
 
   try {
     switch (command) {
+      case 'capabilities':
+        printJson('API capabilities', await apiRequest('GET', '/api/v1/capabilities'));
+        return;
+      case 'context':
+      case 'audit':
+        if (!AGENT_KEY) throw new Error('context/audit require RENDERINGVIDEO_AGENT_KEY.');
+        printJson(command, await apiRequest('GET', `/api/agent/v1/${command}`, { querystring: args[0] }));
+        return;
+      case 'get-preview':
+        if (!args[0]) throw new Error('get-preview requires <tempId>.');
+        printJson('Preview config', await apiRequest('GET', `/api/v1/preview/${encodeURIComponent(args[0])}`));
+        return;
+      case 'delete-task':
+        if (!args[0]) throw new Error('delete-task requires <taskId>.');
+        printJson('Delete task', await apiRequest('DELETE', `/api/v1/video/${encodeURIComponent(args[0])}`));
+        return;
       case 'preview': {
         if (!args[0]) throw new Error('preview requires <schema.json>.');
         const schema = readJson(args[0]);
@@ -210,7 +269,7 @@ async function main() {
         const schema = readJson(args[0]);
         const options = args[1] ? readJson(args[1]) : {};
         const response = await apiRequest('POST', '/api/v1/video', {
-          json: { config: schema, ...options },
+          json: { ...options, config: schema },
         });
         printTaskSummary(response);
         printJson('Raw response', response);
@@ -220,7 +279,7 @@ async function main() {
       case 'render': {
         if (!args[0]) throw new Error('render requires <taskId>.');
         const options = args[1] ? readJson(args[1]) : {};
-        const response = await apiRequest('POST', `/api/v1/video/${args[0]}/render`, {
+        const response = await apiRequest('POST', `/api/v1/video/${encodeURIComponent(args[0])}/render`, {
           json: options,
         });
         printTaskSummary(response);
@@ -234,23 +293,22 @@ async function main() {
         const createOptions = args[1] ? readJson(args[1]) : {};
         const renderOptions = args[2] ? readJson(args[2]) : {};
         const createResponse = await apiRequest('POST', '/api/v1/video', {
-          json: { config: schema, ...createOptions },
+          json: { ...createOptions, config: schema },
         });
         printTaskSummary(createResponse);
         const renderResponse = await apiRequest(
           'POST',
-          `/api/v1/video/${createResponse.taskId}/render`,
+          `/api/v1/video/${encodeURIComponent(createResponse.taskId)}/render`,
           { json: renderOptions }
         );
         printTaskSummary(renderResponse);
-        printJson('Create response', createResponse);
-        printJson('Render response', renderResponse);
+        printJson('Create and render response', { create: createResponse, render: renderResponse });
         return;
       }
 
       case 'task': {
         if (!args[0]) throw new Error('task requires <taskId>.');
-        const response = await apiRequest('GET', `/api/v1/video/${args[0]}`);
+        const response = await apiRequest('GET', `/api/v1/video/${encodeURIComponent(args[0])}`);
         printTaskSummary(response);
         printJson('Raw response', response);
         return;
@@ -286,14 +344,14 @@ async function main() {
 
       case 'delete-file': {
         if (!args[0]) throw new Error('delete-file requires <fileId>.');
-        const response = await apiRequest('DELETE', `/api/v1/files/${args[0]}`);
+        const response = await apiRequest('DELETE', `/api/v1/files/${encodeURIComponent(args[0])}`);
         printJson('Delete file response', response);
         return;
       }
 
       case 'delete-preview': {
         if (!args[0]) throw new Error('delete-preview requires <tempId>.');
-        const response = await apiRequest('DELETE', `/api/v1/preview/${args[0]}`);
+        const response = await apiRequest('DELETE', `/api/v1/preview/${encodeURIComponent(args[0])}`);
         printJson('Delete preview response', response);
         return;
       }
@@ -301,7 +359,7 @@ async function main() {
       case 'convert-preview': {
         if (!args[0]) throw new Error('convert-preview requires <tempId>.');
         const options = args[1] ? readJson(args[1]) : {};
-        const response = await apiRequest('POST', `/api/v1/preview/${args[0]}/convert`, {
+        const response = await apiRequest('POST', `/api/v1/preview/${encodeURIComponent(args[0])}/convert`, {
           json: options,
         });
         printTaskSummary(response);
@@ -312,7 +370,7 @@ async function main() {
       case 'render-preview': {
         if (!args[0]) throw new Error('render-preview requires <tempId>.');
         const options = args[1] ? readJson(args[1]) : {};
-        const response = await apiRequest('POST', `/api/v1/preview/${args[0]}/render`, {
+        const response = await apiRequest('POST', `/api/v1/preview/${encodeURIComponent(args[0])}/render`, {
           json: options,
         });
         printTaskSummary(response);

@@ -1,133 +1,28 @@
-# renderingvideo-api
+# RenderingVideo API Skill
 
-Authenticated RenderingVideo API skill for AI agents.
-
-Use this skill when an agent needs to call the authenticated RenderingVideo REST API with:
-
-- `Authorization: Bearer sk-...`
-- `/api/v1/*` endpoints
-
-This skill is for workflows such as:
-
-- creating authenticated preview links
-- creating permanent video tasks
-- starting renders
-- checking credits
-- uploading files
-- converting previews into permanent tasks
-
-## Files
-
-```text
-renderingvideo-api/
-+-- README.md
-+-- SKILL.md
-+-- example.json
-+-- .gitignore
-`-- scripts/
-    `-- rv-api.cjs
-```
-
-## Included Resources
-
-- `SKILL.md`: AI-facing execution rules
-- `example.json`: minimal schema example
-- `scripts/rv-api.cjs`: authenticated helper CLI for `/api/v1/*`
-
-## Documentation Sources
-
-Use these live docs as the source of truth:
-
-- `https://renderingvideo.com/docs/api-reference.md`
-- `https://renderingvideo.com/docs/json-spec.md`
-- `https://renderingvideo.com/docs/clips.md`
-- `https://renderingvideo.com/docs/elements.md`
-- `https://renderingvideo.com/docs/elements/base-clip.md`
-- `https://renderingvideo.com/docs/animation-and-timing.md`
-
-## Requirements
-
-- Node.js 18+
-- network access to `https://renderingvideo.com`
-- a RenderingVideo API key from `Settings > API Keys`
-
-## Environment
-
-Bash:
+Authenticated video, preview, file and credit workflows, including device-bound Agent Access and audit inspection. Requires Node.js 18+.
 
 ```bash
-export RENDERINGVIDEO_API_KEY="sk-your-api-key"
+node scripts/rv-api.cjs --help
+node scripts/rv-api.cjs capabilities --json
+node scripts/rv-api.cjs preview examples/enhanced-schema.json --json
+node scripts/rv-api.cjs tasks 'category=all&limit=20' --json
 ```
 
-PowerShell:
+Supply one credential in your secure environment: `RENDERINGVIDEO_API_KEY` (`sk-...`, Settings → API Keys) or `RENDERINGVIDEO_AGENT_KEY` (`ak_...`, Admin → Agent Access). Agent mode exchanges a temporary token and signs every request. `context` and `capabilities` require `system:read`; `audit` requires `audit:read`, with `audit:read:all` for `allKeys=true`.
 
-```powershell
-$env:RENDERINGVIDEO_API_KEY = "sk-your-api-key"
-```
+Agent identity is persisted to `~/.config/renderingvideo-agent/device.json`. Override its directory with the absolute `RENDERINGVIDEO_AGENT_STATE_DIR`. Reuse this private file across runs; the private key is never transmitted.
 
-Optional overrides:
+Optional settings: `RENDERINGVIDEO_API_ORIGIN` (app origin), `RENDERINGVIDEO_VIDEO_ORIGIN` (renderer origin), and `RENDERINGVIDEO_TIMEOUT_MS` (default 90000). `RENDERINGVIDEO_API_BASE_URL` is an app-origin alias for local MCP compatibility. Agent mode requires HTTPS except for localhost.
 
-- `RENDERINGVIDEO_API_ORIGIN`, default `https://renderingvideo.com`
-- `RENDERINGVIDEO_VIDEO_ORIGIN`, default `https://video.renderingvideo.com`
+Creation options accept `title`, `category`, and `metadata`. Preview conversion/render options preserve `metadata`. `category=all` includes website tasks; default listing remains `api`. Render options use `webhook_url` and `num_workers`. Quality follows schema dimensions. Creating or converting a task does not start rendering.
 
-## Usage
+New commands include `get-preview`, `delete-task`, `context`, `audit`, and `capabilities`. Append `--json` for machine-readable output. Mutating requests are not replayed automatically after failure.
 
-Create a preview:
+See [SKILL.md](SKILL.md) for all commands, [API reference](https://renderingvideo.com/docs/api-reference.md), [Agent Access](https://renderingvideo.com/docs/agent-access.md), and [schema reference](https://renderingvideo.com/docs/json-spec.md). On older deployments where capabilities returns 404, consult the live docs.
 
-```bash
-node ./scripts/rv-api.cjs preview ./example.json
-```
+## Development
 
-Create a permanent task:
+`scripts/agent-auth.cjs` bundles the official Node SDK's `src/agent.ts` and error helpers without external runtime packages. Rebuild from the matching Node SDK checkout using `npx tsup src/agent.ts --format cjs --out-dir /tmp/rv-agent-auth`, then copy `agent.cjs` to `scripts/agent-auth.cjs`.
 
-```bash
-node ./scripts/rv-api.cjs create ./example.json
-```
-
-Create and render:
-
-```bash
-node ./scripts/rv-api.cjs create-and-render ./example.json
-```
-
-Check credits:
-
-```bash
-node ./scripts/rv-api.cjs credits
-```
-
-## Supported Commands
-
-```bash
-node ./scripts/rv-api.cjs preview <schema.json>
-node ./scripts/rv-api.cjs create <schema.json> [create-options.json]
-node ./scripts/rv-api.cjs render <taskId> [render-options.json]
-node ./scripts/rv-api.cjs create-and-render <schema.json> [create-options.json] [render-options.json]
-node ./scripts/rv-api.cjs task <taskId>
-node ./scripts/rv-api.cjs tasks [querystring]
-node ./scripts/rv-api.cjs credits
-node ./scripts/rv-api.cjs upload <file> [more-files...]
-node ./scripts/rv-api.cjs files [querystring]
-node ./scripts/rv-api.cjs delete-file <fileId>
-node ./scripts/rv-api.cjs delete-preview <tempId>
-node ./scripts/rv-api.cjs convert-preview <tempId> [options.json]
-node ./scripts/rv-api.cjs render-preview <tempId> [options.json]
-```
-
-## API Rules
-
-- always send `Authorization: Bearer ...`
-- `POST /api/v1/preview` sends the schema itself
-- `POST /api/v1/video` sends `{ "config": schema, ...options }`
-- `POST /api/v1/video/:taskId/render` may consume credits
-- preserve identifiers and returned URLs from API responses
-
-## GitHub Usage
-
-If you publish this skill in a GitHub repository:
-
-- keep `README.md` human-facing
-- keep `SKILL.md` AI-facing
-- avoid duplicating large API tables from the docs
-- update examples and commands when the API changes
-
+Run `node --test tests/*.test.cjs` for CLI behavior checks. Cross-language API/device-proof checks live in the website repository at `scripts/sdk-contract.test.ts`. Keep the website's `.claude/skills/renderingvideo-api` copy synchronized.
