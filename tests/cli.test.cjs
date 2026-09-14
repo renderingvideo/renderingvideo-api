@@ -42,12 +42,25 @@ test('rejects a successful HTTP response carrying an API failure', async () => {
   }, async invoke => { await assert.rejects(invoke(['capabilities']), error => error.stderr.includes('INVALID_CONFIG')); });
 });
 
-test('does not replay or follow redirects and rejects ambiguous credential configuration', async () => {
+test('does not replay or follow redirects', async () => {
   let calls = 0;
   await fixture((req, res) => { calls++; res.writeHead(302, { location: '/api/v1/other' }); res.end(); }, async invoke => {
     await assert.rejects(invoke(['capabilities']));
     assert.equal(calls, 1);
-    await assert.rejects(invoke(['capabilities'], { RENDERINGVIDEO_AGENT_KEY: 'ak_test' }), error => error.stderr.includes('not both'));
+    await assert.rejects(invoke(['capabilities'], { RENDERINGVIDEO_API_KEY: '', RENDERINGVIDEO_AGENT_KEY: 'ak_test' }), error => error.stderr.includes('Set RENDERINGVIDEO_API_KEY'));
     assert.equal(calls, 1);
+  });
+});
+
+test('rejects administrator credentials and commands without making a request', async () => {
+  let calls = 0;
+  await fixture((req, res) => { calls++; res.end('{}'); }, async invoke => {
+    for (const key of ['ak_admin', 'at_admin']) {
+      await assert.rejects(invoke(['capabilities'], { RENDERINGVIDEO_API_KEY: key }), error => error.stderr.includes('must start with sk-'));
+    }
+    for (const command of ['context', 'audit']) {
+      await assert.rejects(invoke([command]), error => error.stderr.includes('Unknown command'));
+    }
+    assert.equal(calls, 0);
   });
 });
