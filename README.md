@@ -7,10 +7,14 @@ Authenticated video, preview, file and credit workflows using the user's API key
 Clone this repository into your agent's skills directory using the short skill name:
 
 ```bash
-git clone https://github.com/renderingvideo/renderingvideo-api.git rv-api
+git clone https://github.com/renderingvideo/rv-api.git rv-api
 ```
 
-Then load `rv-api/SKILL.md` using your agent's skill discovery workflow. The skill identifier is `rv-api`. For an existing installation, pull the update and rename the old `renderingvideo-api` directory to `rv-api`. The GitHub repository URL remains unchanged.
+Then load `rv-api/SKILL.md` using your agent's skill discovery workflow. The skill identifier is `rv-api`. For an existing installation, pull the update and rename the old `renderingvideo-api` directory to `rv-api`. Update the existing clone’s Git remote to the renamed repository:
+
+```bash
+git remote set-url origin https://github.com/renderingvideo/rv-api.git
+```
 
 ## Usage
 
