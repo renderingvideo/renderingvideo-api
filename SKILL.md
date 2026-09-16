@@ -1,9 +1,9 @@
 ---
-name: renderingvideo-api
+name: rv-api
 description: "Use RenderingVideo's authenticated video, preview, file, and credit API with the user’s API key. Supports schema capability discovery and permanent renders for resources owned by that user."
 ---
 
-# RenderingVideo Authenticated API
+# rv-api
 
 Use this skill for authenticated RenderingVideo workflows. For public previews without credentials, use the public preview endpoint described in the live docs.
 
